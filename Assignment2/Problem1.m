@@ -10,7 +10,7 @@ B = [0 0 0 0 7.5].';
 C = [eye(4), zeros(4,1)];
 
 
-%% Task c
+%% Task c -- this is wrong
 A1 = [  A(1,1), A(1,4);
         A(4,1), A(4,4)];
 
