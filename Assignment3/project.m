@@ -2,7 +2,7 @@
 %
 % Author:           My name
 % Study program:    My study program
-addMass = 0;
+addMass = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -17,11 +17,20 @@ m = 17.0677e6;          % mass (kg)
 Iz = 2.1732e10;         % yaw moment of inertia (kg m^3)
 xg = -3.7;              % CG x-ccordinate (m)
 L = 161;                % length (m)
-B = 21.8;               % beam (m)
+Beam = 21.8;               % beam (m)
 T = 8.9;                % draft (m)
 KT = 0.7;               % propeller coefficient (-)
 Dia = 3.3;              % propeller diameter (m)
 rho = 1025;             % density of water (m/s^3)
+kin_visc = 1e-6;        % kinematic viscosity (m/s^2)
+
+% damping
+T1 = 20;                % (s)
+T2 = 20;                % (s)
+T6 = 10;                % (s)
+k = 0.1;
+Cr = 0;
+epsilon = 0.001;
 
 % rudder limitations
 delta_max  = 40 * pi/180;        % max rudder angle      (rad)
@@ -53,6 +62,16 @@ if addMass == 1
 else
     Minv = inv(MRB);
 end
+
+% linear damping matrix
+Xu = - (m - Xudot) / T1;
+Yv = - (m - Yvdot) / T2;
+Nr = - (Iz - Nrdot) / T6;
+D = diag([Xu Yv Nr]);
+
+% nonlinear damping param
+Cf = @(ur) 0.075 / (((log(L*abs(ur)/kin_visc)) - 2)^2 + epsilon);
+Cd = Hoerner(Beam, T);
 
 % input matrix
 t_thr = 0.05;           % thrust deduction number
@@ -101,11 +120,26 @@ for i=1:Ns+1
     delta_c = 0.1;            % rudder angle command (rad)
     n_c = 10;                 % propeller speed (rps)
     
+    % damping
+    u_r = nu(1);
+    v_r = nu(2);
+    r = nu(3);
+    X = - 0.5 * rho * S(1+k) * Cf(u_r) * u_r * abs(u_r);
+    
+    dx = L/10;                                  % 10 strips
+    for xL = -L/2:dx:L/2
+        Ucf = abs(v_r + xL*r)*(v_r + xL*r);
+        Yh = Yh - 0.5*rho*T*Cd*Ucf*dx;         % sway force
+        Nh = Nh - 0.5*rho*T*Cd*xL*Ucf*dx;      % yaw moment
+    end
+    
+    t_damp = [X Yh Nh]';
+    
     % ship dynamics
     u = [ thr delta ]';
     tau = B * u;
-    nu_dot = Minv * (tau - C * nu); 
-    eta_dot = R * nu;    
+    nu_dot = Minv * (tau - C * nu - D * nu + t_damp);    % added linear damping
+    eta_dot = R * nu;
     
     % Rudder saturation and dynamics (Sections 9.5.2)
     if abs(delta_c) >= delta_max
