@@ -25,9 +25,10 @@ rho = 1025;             % density of water (m/s^3)
 kin_visc = 1e-6;        % kinematic viscosity (m/s^2)
 
 % damping
-T1 = 20;                % (s)
-T2 = 20;                % (s)
-T6 = 10;                % (s)
+T1 = 20;                                    % (s)
+T2 = 20;                                    % (s)
+T6 = 10;                                    % (s)
+S = L * Beam;    % (m^2)
 k = 0.1;
 Cr = 0;
 epsilon = 0.001;
@@ -43,7 +44,7 @@ Yrdot =  9.3677e5;
 Nvdot =  Yrdot;
 Nrdot = -2.4283e10;
 
-MA = [  Xudot   0       0;
+MA = - [  Xudot   0       0;
         0       Yvdot   Yrdot;
         0       Yrdot   Nrdot];
     
@@ -67,7 +68,7 @@ end
 Xu = - (m - Xudot) / T1;
 Yv = - (m - Yvdot) / T2;
 Nr = - (Iz - Nrdot) / T6;
-D = diag([Xu Yv Nr]);
+D = - diag([Xu Yv Nr]);
 
 % nonlinear damping param
 Cf = @(ur) 0.075 / (((log(L*abs(ur)/kin_visc)) - 2)^2 + epsilon);
@@ -124,21 +125,23 @@ for i=1:Ns+1
     u_r = nu(1);
     v_r = nu(2);
     r = nu(3);
-    X = - 0.5 * rho * S(1+k) * Cf(u_r) * u_r * abs(u_r);
+    X = - 0.5 * rho * S * (1+k) * Cf(u_r) * u_r * abs(u_r);
     
-    dx = L/10;                                  % 10 strips
+    Yh = 0;                 % init
+    Nh = 0;                 % init
+    dx = L/10;              % 10 strips
     for xL = -L/2:dx:L/2
         Ucf = abs(v_r + xL*r)*(v_r + xL*r);
         Yh = Yh - 0.5*rho*T*Cd*Ucf*dx;         % sway force
         Nh = Nh - 0.5*rho*T*Cd*xL*Ucf*dx;      % yaw moment
     end
     
-    t_damp = [X Yh Nh]';
+    t_damp = - [X Yh Nh]';
     
     % ship dynamics
     u = [ thr delta ]';
     tau = B * u;
-    nu_dot = Minv * (tau - C * nu - D * nu + t_damp);    % added linear damping
+    nu_dot = Minv * (tau - C * nu - D * nu - t_damp);    % added linear damping
     eta_dot = R * nu;
     
     % Rudder saturation and dynamics (Sections 9.5.2)
